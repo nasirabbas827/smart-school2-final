@@ -1,0 +1,92 @@
+<?php
+include('../config.php');
+session_start();
+
+// Allow only teachers
+if (!isset($_SESSION["id"]) || $_SESSION["role"] !== "teacher") {
+    header("Location: ../login.php");
+    exit();
+}
+
+$teacher_id = $_SESSION["id"];
+$message = "";
+
+// Get teacher's class
+$sql = "SELECT class_id, class_name FROM Classes WHERE teacher_id = ?";
+$stmt = mysqli_prepare($conn, $sql);
+mysqli_stmt_bind_param($stmt, "i", $teacher_id);
+mysqli_stmt_execute($stmt);
+$result = mysqli_stmt_get_result($stmt);
+$class = mysqli_fetch_assoc($result);
+$class_id = $class ? $class['class_id'] : null;
+
+// Fetch subjects for this teacher's class
+$subjects = [];
+if ($class_id) {
+    $sub_sql = "SELECT subject_id, subject_name FROM subjects WHERE class_id = ?";
+    $stmt_sub = mysqli_prepare($conn, $sub_sql);
+    mysqli_stmt_bind_param($stmt_sub, "i", $class_id);
+    mysqli_stmt_execute($stmt_sub);
+    $subjects = mysqli_stmt_get_result($stmt_sub);
+}
+
+if ($_SERVER["REQUEST_METHOD"] === "POST" && $class_id) {
+    $day_of_week = $_POST['day_of_week'];
+    $start_time = $_POST['start_time'];
+    $end_time = $_POST['end_time'];
+    $subject_id = intval($_POST['subject_id']);
+
+    $insert = "INSERT INTO Timetables (class_id, day_of_week, start_time, end_time, subject_id, uploaded_by) 
+               VALUES (?, ?, ?, ?, ?, ?)";
+    $stmt2 = mysqli_prepare($conn, $insert);
+    mysqli_stmt_bind_param($stmt2, "isssii", $class_id, $day_of_week, $start_time, $end_time, $subject_id, $teacher_id);
+    if (mysqli_stmt_execute($stmt2)) {
+        $message = "Timetable added successfully.";
+    } else {
+        $message = "Error: " . mysqli_error($conn);
+    }
+}
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Timetable</title>
+    <link rel="stylesheet" href="../CSS/style.css">
+</head>
+<body>
+<?php include('navbar.php'); ?>
+<h2>Add Timetable</h2>
+<?php if ($message) echo "<p style='color:green;'>$message</p>"; ?>
+
+<?php if ($class_id): ?>
+<form method="post">
+    <label>Day of Week:</label>
+    <select name="day_of_week" required>
+        <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+        <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
+    </select> 
+
+    <label>Start Time:</label>
+    <input type="time" name="start_time" required> 
+
+    <label>End Time:</label>
+    <input type="time" name="end_time" required> 
+
+    <label>Subject:</label>
+    <select name="subject_id" required>
+        <option value="">Select Subject</option>
+        <?php while ($sub = mysqli_fetch_assoc($subjects)): ?>
+            <option value="<?php echo $sub['subject_id']; ?>">
+                <?php echo htmlspecialchars($sub['subject_name']); ?>
+            </option>
+        <?php endwhile; ?>
+    </select> 
+
+    <button type="submit">Add Timetable</button>
+    <a href="view_timetables.php">View Timetable</a>
+</form>
+<?php else: ?>
+<p>You are not assigned to a class.</p>
+<?php endif; ?>
+</body>
+</html>
